@@ -11,6 +11,18 @@ https://github.com/grpc/grpc-go
 - 安装proto `go get -u github.com/golang/protobuf/proto`
 - 安装protoc-gen-go `go get -u github.com/golang/protobuf/protoc-gen-go`
 
+
+### 遇到命令不存在 command not found: protoc
+
+```
+缺少protobuf预先安装导致的问题。 protoc-gen-go相当于只是protobuf的一个语言支持。
+
+安装protobuf参照资料
+mac 下   brew install protobuf
+windows 下 https://blog.csdn.net/qq_41185868/article/details/82882206
+linux 下 https://blog.csdn.net/sszzyzzy/article/details/89946075
+```
+
 ### 遇到 I/O Timeout Errors
 
 ```
@@ -44,7 +56,8 @@ export LGOBIN=/Users/niuyufu/go_1.12/bin
 # 构建grpc测试server与client
 
 - 首先编写 `echo.proto`
-- 运行IDL生成命令
+- 运行IDL生成命令，（如：遇到命令不存在 command not found: protoc 请参照上文帮助）
+
 `protoc -I . --go_out=plugins=grpc:proto ./echo.proto`
 - 使用生成的IDL单独构建 server 与 client 即可
 

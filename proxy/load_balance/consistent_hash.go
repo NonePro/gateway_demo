@@ -100,8 +100,6 @@ func (c *ConsistentHashBanlance) SetConf(conf LoadBalanceConf) {
 func (c *ConsistentHashBanlance) Update() {
 	if conf, ok := c.conf.(*LoadBalanceZkConf); ok {
 		fmt.Println("Update get conf:", conf.GetConf())
-		c.mux.Lock()
-		defer c.mux.Unlock()
 		c.keys = nil
 		c.hashMap = nil
 		for _, ip := range conf.GetConf() {
@@ -110,10 +108,8 @@ func (c *ConsistentHashBanlance) Update() {
 	}
 	if conf, ok := c.conf.(*LoadBalanceCheckConf); ok {
 		fmt.Println("Update get conf:", conf.GetConf())
-		c.mux.Lock()
-		defer c.mux.Unlock()
 		c.keys = nil
-		c.hashMap = nil
+		c.hashMap = map[uint32]string{}
 		for _, ip := range conf.GetConf() {
 			c.Add(strings.Split(ip, ",")...)
 		}

@@ -2,6 +2,7 @@ package tcp_proxy
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"net"
 	"sync"
@@ -16,6 +17,21 @@ var (
 	LocalAddrContextKey = &contextKey{"local-addr"}
 )
 
+type onceCloseListener struct {
+	net.Listener
+	once     sync.Once
+	closeErr error
+}
+
+func (oc *onceCloseListener) Close() error {
+	oc.once.Do(oc.close)
+	return oc.closeErr
+}
+
+func (oc *onceCloseListener) close() {
+	oc.closeErr = oc.Listener.Close()
+}
+
 type TCPHandler interface {
 	ServeTCP(ctx context.Context, conn net.Conn)
 }
@@ -24,13 +40,12 @@ type TcpServer struct {
 	Addr    string
 	Handler TCPHandler
 	err     error
+	BaseCtx context.Context
 
 	WriteTimeout     time.Duration
 	ReadTimeout      time.Duration
 	KeepAliveTimeout time.Duration
 
-	//DialTimeout time.Duration
-	//DialContext func(ctx context.Context, network, addr string) (net.Conn, error) //下游参数
 	mu         sync.Mutex
 	inShutdown int32
 	doneChan   chan struct{}
@@ -45,6 +60,9 @@ func (srv *TcpServer) ListenAndServe() error {
 	if srv.shuttingDown() {
 		return ErrServerClosed
 	}
+	if srv.doneChan == nil {
+		srv.doneChan = make(chan struct{})
+	}
 	addr := srv.Addr
 	if addr == "" {
 		return errors.New("need addr")
@@ -53,20 +71,24 @@ func (srv *TcpServer) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	return srv.Serve(tcpKeepAliveListener{ln.(*net.TCPListener)})
+	return srv.Serve(tcpKeepAliveListener{
+		ln.(*net.TCPListener)})
 }
 
 func (srv *TcpServer) Close() error {
 	atomic.StoreInt32(&srv.inShutdown, 1)
-	close(srv.doneChan)
-	srv.l.Close()
+	close(srv.doneChan) //关闭channel
+	srv.l.Close()       //执行listener关闭
 	return nil
 }
 
 func (srv *TcpServer) Serve(l net.Listener) error {
 	srv.l = &onceCloseListener{Listener: l}
-	defer srv.l.Close()
-	baseCtx := context.Background()
+	defer srv.l.Close() //执行listener关闭
+	if srv.BaseCtx == nil {
+		srv.BaseCtx = context.Background()
+	}
+	baseCtx := srv.BaseCtx
 	ctx := context.WithValue(baseCtx, ServerContextKey, srv)
 	for {
 		rw, e := l.Accept()
@@ -76,7 +98,8 @@ func (srv *TcpServer) Serve(l net.Listener) error {
 				return ErrServerClosed
 			default:
 			}
-			return e
+			fmt.Printf("accept fail, err: %v\n", e)
+			continue
 		}
 		c := srv.newConn(rw)
 		go c.serve(ctx)
@@ -108,10 +131,6 @@ func (srv *TcpServer) newConn(rwc net.Conn) *conn {
 func (s *TcpServer) getDoneChan() <-chan struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.getDoneChanLocked()
-}
-
-func (s *TcpServer) getDoneChanLocked() chan struct{} {
 	if s.doneChan == nil {
 		s.doneChan = make(chan struct{})
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"runtime"
-	"sync"
 )
 
 type tcpKeepAliveListener struct {
@@ -21,24 +20,13 @@ func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
 	return tc, nil
 }
 
-type onceCloseListener struct {
-	net.Listener
-	once     sync.Once
-	closeErr error
-}
-
-func (oc *onceCloseListener) Close() error {
-	oc.once.Do(oc.close)
-	return oc.closeErr
-}
-
-func (oc *onceCloseListener) close() { oc.closeErr = oc.Listener.Close() }
-
 type contextKey struct {
 	name string
 }
 
-func (k *contextKey) String() string { return "tcp_proxy context value " + k.name }
+func (k *contextKey) String() string {
+	return "tcp_proxy context value " + k.name
+}
 
 type conn struct {
 	server     *TcpServer
